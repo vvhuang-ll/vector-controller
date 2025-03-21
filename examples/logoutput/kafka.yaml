@@ -1,0 +1,35 @@
+apiVersion: logging.vector.io/v1
+kind: LogOutput
+metadata:
+  name: kafka-output
+  namespace: logging-system
+spec:
+  # 输出配置：定义输出目标和数据流向
+  sinks:
+    # Kafka 输出，将日志发送到 Kafka
+    kafka_sink:
+      type: kafka
+      # 使用通配符 "*" 表示接收所有来源的输入
+      inputs: ["*"]
+      # Kafka 特有配置
+      config:
+        # Kafka 服务器地址
+        bootstrap_servers: "kafka-broker:9092"
+        # 使用动态主题名称，根据命名空间进行分类
+        topic: "k8s-logs-{{ kubernetes.namespace }}"
+        # 编码配置
+        encoding:
+          codec: json
+        # 压缩设置
+        compression: "gzip"
+        # 使用 Pod 名称作为消息的 key
+        key_field: ".kubernetes.pod_name"
+        # 批处理设置
+        batch:
+          max_events: 1000
+          timeout_secs: 1
+        # 缓冲区设置
+        buffer:
+          type: "disk"
+          max_size: 104900000  # 100MB
+          when_full: "block" 

@@ -1,0 +1,82 @@
+apiVersion: logging.vector.io/v1
+kind: LogFlow
+metadata:
+  name: multi-source-logflow
+  namespace: default
+spec:
+  # 1. 多种日志源配置
+  sources:
+    # Kubernetes Pod 日志，采集特定应用的日志
+    app_logs:
+      type: kubernetes_logs
+      config:
+        # 只采集带有特定标签的 Pod 日志
+        extra_label_selector: "app=web-app"
+        # 过滤特定命名空间
+        extra_namespace_label_selector: "environment=production"
+    
+    # 系统日志文件
+    system_logs:
+      type: file
+      config:
+        include: ["/var/log/syslog"]
+        read_from: "beginning"
+        # 设置多行合并策略
+        multiline:
+          start_pattern: '^[a-zA-Z]+\s+\d+\s+\d+:\d+:\d+'
+          mode: "continue_through"
+          timeout_ms: 1000
+    
+    # 主机指标采集
+    host_metrics:
+      type: host_metrics
+      config:
+        scrape_interval_secs: 30
+        # 配置要采集的指标
+        filesystem:
+          devices:
+            excludes: ["binfmt_misc"]
+        cpu: {}
+        memory: {}
+        network: {}
+  
+  # 2. 转换配置（通常由控制器自动生成，但也可以手动配置）
+  transforms:
+    # 解析 JSON 格式的日志
+    parse_json_logs:
+      type: remap
+      inputs: ["app_logs"]
+      source: |
+        # 尝试解析 JSON，如果失败则保持原样
+        if is_string(.message) && starts_with(.message, "{") {
+          . = merge(., parse_json!(.message))
+        }
+    
+    # 过滤错误级别的日志
+    filter_errors:
+      type: filter
+      inputs: ["parse_json_logs"]
+      condition: '.level == "ERROR" || .severity == "error" || .loglevel == "ERROR"'
+    
+    # 添加来源信息
+    add_source_info:
+      type: remap
+      inputs: ["system_logs"]
+      source: |
+        .source_type = "system"
+        .host = get_env_var!("HOSTNAME")
+  
+  # 3. 元数据注入配置
+  metadata:
+    inject:
+      - podName
+      - namespace
+      - podLabels
+      - deployment
+      - nodeName
+      - containerName
+  
+  # 4. 输出配置
+  outputRef:
+    name: multi-output
+    namespace: logging-system 

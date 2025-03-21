@@ -1,0 +1,26 @@
+apiVersion: logging.vector.io/v1
+kind: LogFlow
+metadata:
+  name: basic-logflow
+  namespace: default
+spec:
+  # 1. 日志源配置：定义日志采集的源和路径
+  sources:
+    # Kubernetes 日志采集源，采集集群中的所有Pod日志
+    kubernetes_logs:
+      type: kubernetes_logs
+      # 不设置额外标签选择器，表示采集所有Pod
+  
+  # 2. 元数据注入配置：定义需要注入的Kubernetes元数据字段
+  metadata:
+    inject:
+      - podName        # Pod名称
+      - namespace      # 命名空间
+      - podLabels      # Pod标签
+      - nodeName       # 节点名称
+      - containerName  # 容器名称
+  
+  # 3. 输出配置：引用外部的LogOutput CRD
+  outputRef:
+    name: kafka-output
+    namespace: logging-system 
